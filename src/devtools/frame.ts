@@ -1,9 +1,11 @@
-const OFFICIAL_FRONTEND_HOST = 'chrome-devtools-frontend.appspot.com';
-// Chrome 132.0.6834.89 的 Chromium DEPS 所固定的 DevTools frontend revision。
-// 部分厂商 WebView 返回私有 WebKit revision，官方 serve_rev 不存在该构建，
-// 此时用同一浏览器版本的官方 hosted frontend 作为 CDP 兼容回退。
-const COMPATIBLE_FRONTEND_URL =
-  'https://chrome-devtools-frontend.appspot.com/serve_rev/@f2f3682c9db8ca427f8c64f0402cc2c5152c6c24/inspector.html';
+import type { MessageKey } from '../app/i18n';
+import type { FrontendSource } from './frontend-source';
+import {
+  buildFrontendCandidates,
+  isAllowedAssetUrl,
+  OFFICIAL_FETCH_TIMEOUT_MS,
+  OFFICIAL_FRONTEND_HOST,
+} from './frontend-source';
 
 interface FrameInitMessage {
   type: 'webhdc-devtools-init';
@@ -26,6 +28,20 @@ type EventHandler<T extends Event> =
 
 let bridgePort: MessagePort | null = null;
 const sockets = new Map<string, MessageChannelWebSocket>();
+
+/** frontend 加载阶段与手动切换请求，用于中断官方源的尝试。 */
+let frontendPhase: 'idle' | 'loading' | 'done' = 'idle';
+let switchToLocal = false;
+let activeOfficialFetch: AbortController | null = null;
+
+/** 收到父页面请求：放弃官方源，立即改用本地内置副本。 */
+function requestLocalFrontend(): void {
+  if (frontendPhase !== 'loading' || switchToLocal) {
+    return;
+  }
+  switchToLocal = true;
+  activeOfficialFetch?.abort();
+}
 
 function post(
   message: Record<string, unknown>,
@@ -205,6 +221,10 @@ function receiveParentMessage(value: unknown): void {
     return;
   }
   const message = value as ParentMessage;
+  if (message.type === 'frontend-prefer-local') {
+    requestLocalFrontend();
+    return;
+  }
   if (typeof message.id !== 'string') {
     return;
   }
@@ -275,29 +295,11 @@ function installCrossOriginWorkerBridge(): void {
   });
 }
 
-function officialUrl(raw: string): URL {
-  const url = new URL(raw);
-  if (
-    url.hostname !== OFFICIAL_FRONTEND_HOST ||
-    !/^https?:$/u.test(url.protocol)
-  ) {
-    throw new Error('只允许加载 Chromium 官方托管的 DevTools frontend');
-  }
-  url.protocol = 'https:';
-  url.username = '';
-  url.password = '';
-  url.searchParams.delete('ws');
-  url.searchParams.delete('wss');
-  return url;
-}
-
-function resolveOfficialAsset(raw: string, base: URL): string {
-  const asset = new URL(raw, base);
-  if (
-    asset.hostname !== OFFICIAL_FRONTEND_HOST ||
-    asset.protocol !== 'https:'
-  ) {
-    throw new Error(`DevTools frontend 引用了非官方资源：${asset.href}`);
+/** frontend 子资源只允许官方 host（https）或同源内置副本。 */
+function resolveFrontendAsset(raw: string, base: URL): string {
+  const asset = isAllowedAssetUrl(raw, base, window.location.origin);
+  if (!asset) {
+    throw new Error(`DevTools frontend 引用了非官方/非同源资源：${raw}`);
   }
   return asset.href;
 }
@@ -307,11 +309,22 @@ function bootstrapElement(): HTMLElement | null {
 }
 
 async function loadFrontend(rawUrl: string): Promise<void> {
-  const preferredUrl = officialUrl(rawUrl);
   post({ type: 'frontend-loading' });
-  const { frontendUrl, source } = await fetchFrontendEntry(preferredUrl);
+  const { frontendUrl, html, source } = await fetchFrontendEntry(rawUrl);
+  if (source !== 'preferred') {
+    const reason =
+      source === 'local'
+        ? '官方 frontend 不可达，使用内置副本'
+        : '设备版本 frontend 不可用，切换到 Chromium 官方兼容版本';
+    console.warn(`[webhdc-devtools] ${reason}`);
+    const key: MessageKey =
+      source === 'local'
+        ? 'bridge.frontendLocalFallback'
+        : 'bridge.frontendCompatFallback';
+    post({ type: 'frontend-fallback', key });
+  }
   await warmCriticalFrontendAssets(frontendUrl);
-  const parsed = new DOMParser().parseFromString(source, 'text/html');
+  const parsed = new DOMParser().parseFromString(html, 'text/html');
   const scripts = [
     ...parsed.querySelectorAll<HTMLScriptElement>('script[src]'),
   ];
@@ -336,7 +349,7 @@ async function loadFrontend(rawUrl: string): Promise<void> {
   )) {
     const link = document.createElement('link');
     link.rel = 'stylesheet';
-    link.href = resolveOfficialAsset(
+    link.href = resolveFrontendAsset(
       sourceLink.getAttribute('href') ?? '',
       frontendUrl,
     );
@@ -354,7 +367,7 @@ async function loadFrontend(rawUrl: string): Promise<void> {
         new Promise<void>((resolve, reject) => {
           const script = document.createElement('script');
           script.type = sourceScript.type || 'text/javascript';
-          script.src = resolveOfficialAsset(
+          script.src = resolveFrontendAsset(
             sourceScript.getAttribute('src') ?? '',
             frontendUrl,
           );
@@ -396,38 +409,91 @@ async function warmCriticalFrontendAssets(frontendUrl: URL): Promise<void> {
   }
 }
 
-async function fetchFrontendEntry(
-  preferredUrl: URL,
-): Promise<{ frontendUrl: URL; source: string }> {
-  const fallbackUrl = officialUrl(COMPATIBLE_FRONTEND_URL);
-  const candidates =
-    preferredUrl.href === fallbackUrl.href
-      ? [preferredUrl]
-      : [preferredUrl, fallbackUrl];
-  const failures: string[] = [];
+interface FrontendEntry {
+  frontendUrl: URL;
+  html: string;
+  source: FrontendSource;
+}
 
-  for (const frontendUrl of candidates) {
+/** 依次尝试候选链：设备 revision → 固定兼容版 → 本地内置副本。 */
+async function fetchFrontendEntry(preferred: string): Promise<FrontendEntry> {
+  const candidates = buildFrontendCandidates(preferred, window.location.origin);
+  const failures: string[] = [];
+  let localFailed = false;
+
+  for (const candidate of candidates) {
+    if (switchToLocal && candidate.source !== 'local') {
+      continue;
+    }
     try {
-      const response = await fetch(frontendUrl, {
-        credentials: 'omit',
-        referrerPolicy: 'no-referrer',
-      });
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-      if (frontendUrl.href !== preferredUrl.href) {
-        const message =
-          '设备版本 frontend 不可用，已切换到 Chromium 官方兼容版本';
-        console.warn(`[webhdc-devtools] ${message}`);
-        post({ type: 'frontend-fallback', message });
-      }
-      return { frontendUrl, source: await response.text() };
+      const html = await fetchEntryHtml(
+        candidate.url,
+        candidate.source === 'local',
+      );
+      return { frontendUrl: candidate.url, html, source: candidate.source };
     } catch (error) {
-      failures.push(error instanceof Error ? error.message : String(error));
+      if (switchToLocal) {
+        continue;
+      }
+      failures.push(
+        `${candidate.url.href}：${error instanceof Error ? error.message : String(error)}`,
+      );
+      if (candidate.source === 'local') {
+        localFailed = true;
+      }
     }
   }
 
-  throw new Error(`下载 DevTools frontend 入口失败：${failures.join('；')}`);
+  const hint = localFailed
+    ? '；内置副本缺失时请先运行 pnpm run fetch:devtools 下载'
+    : '';
+  throw new Error(
+    `下载 DevTools frontend 入口失败：${failures.join('；')}${hint}`,
+  );
+}
+
+async function fetchEntryHtml(url: URL, isLocal: boolean): Promise<string> {
+  const response = await fetchWithTimeout(
+    url,
+    isLocal ? 0 : OFFICIAL_FETCH_TIMEOUT_MS,
+  );
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`);
+  }
+  return response.text();
+}
+
+/** 挂起的连接必须主动 abort，否则官方源不可达时要等到系统级超时。 */
+async function fetchWithTimeout(
+  url: URL,
+  timeoutMs: number,
+): Promise<Response> {
+  if (timeoutMs <= 0) {
+    return fetch(url, { credentials: 'omit', referrerPolicy: 'no-referrer' });
+  }
+  const controller = new AbortController();
+  activeOfficialFetch = controller;
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, {
+      credentials: 'omit',
+      referrerPolicy: 'no-referrer',
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (switchToLocal) {
+      throw new Error('已切换到内置副本');
+    }
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new Error(`连接超时（>${timeoutMs}ms）`);
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timer);
+    if (activeOfficialFetch === controller) {
+      activeOfficialFetch = null;
+    }
+  }
 }
 
 function showError(error: unknown): void {
@@ -466,7 +532,12 @@ function initialize(event: MessageEvent<unknown>): void {
   installWebSocketBridge(event.ports[0]);
   installCrossOriginWorkerBridge();
   post({ type: 'frame-ready' });
-  void loadFrontend(event.data.frontendUrl).catch(showError);
+  frontendPhase = 'loading';
+  loadFrontend(event.data.frontendUrl)
+    .catch(showError)
+    .finally(() => {
+      frontendPhase = 'done';
+    });
 }
 
 window.addEventListener('message', initialize);

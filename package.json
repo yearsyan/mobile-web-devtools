@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "fetch:devtools": "node scripts/fetch-devtools-frontend.mjs",
     "check": "biome check --write",
     "format": "biome format --write"
   },

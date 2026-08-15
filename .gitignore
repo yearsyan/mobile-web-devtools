@@ -7,6 +7,9 @@
 node_modules
 dist/
 
+# 内置 DevTools 前端兜底副本（pnpm run fetch:devtools 下载）
+public/devtools/
+
 # Profile
 .rspack-profile-*/
 

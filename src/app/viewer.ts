@@ -18,11 +18,19 @@ import { onLocaleChange, t } from './i18n';
 import { EXPAND_ICON, MINIMIZE_ICON } from './icons';
 import { currentClient } from './state';
 import { planTargetRefresh } from './target-refresh';
-import { setActiveSocket, setError, setSocketOpenHandler } from './ui';
+import {
+  hideSlowFrontendDialog,
+  setActiveSocket,
+  setError,
+  setSocketOpenHandler,
+  showSlowFrontendDialog,
+} from './ui';
 
 const FORWARD_OPTIONS = { timeout: 15_000, highWaterMark: 32 * 1024 * 1024 };
 const TARGET_POLL_INTERVAL = 2_000;
 const TARGET_POLL_MAX_FAILURES = 3;
+/** 官方 frontend 超过该时长未就绪时弹窗，允许手动切换到内置副本。 */
+const SLOW_FRONTEND_PROMPT_MS = 5_000;
 
 let mapSequence = 0;
 let mappedForward: HdcForward | null = null;
@@ -35,6 +43,9 @@ let targetPollInFlight = false;
 let targetPollFailures = 0;
 /** bridge 最近一次状态（open / closed 可在语言切换后重新取词）。 */
 let lastBridgeState: { state: string; code?: number } = { state: 'loading' };
+let slowFrontendTimer: ReturnType<typeof setTimeout> | null = null;
+/** 用户手动选择过内置副本后，本次会话内的新 frame 直接走本地。 */
+let localFrontendPreferred = false;
 
 /** 注册 socket 列表“打开 DevTools”入口。 */
 export function initViewer(): void {
@@ -242,6 +253,8 @@ function renderFrame(
   const errorBox = $('frame-error');
   bridge?.dispose();
   bridge = null;
+  clearSlowFrontendTimer();
+  hideSlowFrontendDialog();
   wrap.replaceChildren();
   errorBox.classList.add('hidden');
   errorBox.textContent = '';
@@ -299,7 +312,10 @@ function renderFrame(
       forward: mappedForward,
       port: channel.port1,
       targetWebSocketUrl: target.webSocketDebuggerUrl,
-      onStatus: setBridgeStatus,
+      onStatus: (status) => {
+        setBridgeStatus(status);
+        handleFrontendProgress(status);
+      },
       // 包装 t：顺带记录可长时间停留的 bridge 状态，供语言切换后重新取词。
       formatMessage: (key, params) => {
         if (key === 'bridge.cdpOpen') {
@@ -313,6 +329,9 @@ function renderFrame(
         return t(key, params);
       },
     });
+    if (localFrontendPreferred) {
+      bridge.preferLocalFrontend();
+    }
     contentWindow.postMessage(
       { type: 'webhdc-devtools-init', frontendUrl },
       window.location.origin,
@@ -332,6 +351,46 @@ function setBridgeStatus(status: DevtoolsBridgeStatus): void {
   $('bridge-status-text').textContent = status.message;
 }
 
+/**
+ * 官方 frontend 超过 5s 未就绪时弹窗，可手动切换到内置副本；
+ * 切到本地副本（手动或自动）即视为不再等待，关闭弹窗并停表。
+ */
+function handleFrontendProgress(status: DevtoolsBridgeStatus): void {
+  if (status.state !== 'loading') {
+    clearSlowFrontendTimer();
+    hideSlowFrontendDialog();
+    return;
+  }
+  if (status.detail === 'frontend-loading') {
+    startSlowFrontendTimer();
+  } else if (
+    status.detail === 'frontend-ready' ||
+    (status.detail === 'frontend-fallback' &&
+      status.fallbackKey === 'bridge.frontendLocalFallback')
+  ) {
+    clearSlowFrontendTimer();
+    hideSlowFrontendDialog();
+  }
+}
+
+function startSlowFrontendTimer(): void {
+  clearSlowFrontendTimer();
+  slowFrontendTimer = setTimeout(() => {
+    slowFrontendTimer = null;
+    showSlowFrontendDialog(() => {
+      localFrontendPreferred = true;
+      bridge?.preferLocalFrontend();
+    });
+  }, SLOW_FRONTEND_PROMPT_MS);
+}
+
+function clearSlowFrontendTimer(): void {
+  if (slowFrontendTimer !== null) {
+    clearTimeout(slowFrontendTimer);
+    slowFrontendTimer = null;
+  }
+}
+
 export function toggleFullscreen(): void {
   const viewer = $('viewer');
   viewer.classList.toggle('fullscreen');
@@ -348,6 +407,8 @@ export async function closeMapped(): Promise<void> {
   stopTargetPolling();
   bridge?.dispose();
   bridge = null;
+  clearSlowFrontendTimer();
+  hideSlowFrontendDialog();
   const forward = mappedForward;
   mappedForward = null;
   mappedVersion = null;

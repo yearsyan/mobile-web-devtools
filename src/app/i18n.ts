@@ -55,10 +55,19 @@ const messages = {
     'bridge.frameReady': 'iframe 通信桥已就绪',
     'bridge.frontendLoading': '正在加载匹配版本的 DevTools frontend…',
     'bridge.frontendReady': 'DevTools frontend 已加载，正在连接 CDP…',
+    'bridge.frontendCompatFallback':
+      '设备版本 frontend 不可用，已切换到 Chromium 官方兼容版本',
+    'bridge.frontendLocalFallback':
+      '官方 frontend 不可达，已使用内置副本（可能与设备版本不完全匹配）',
     'bridge.cdpOpen': 'CDP 已通过 WebHDC 连接',
     'bridge.cdpClosed': 'CDP 已断开（{code}）',
     'viewer.frameAccess': '无法访问 DevTools iframe',
     'viewer.pollStopped': '页面列表自动刷新失败，已停止',
+    'dialog.slowFrontend.title': '官方 DevTools 前端响应缓慢',
+    'dialog.slowFrontend.desc':
+      '官方源超过 5 秒未响应（可能是网络无法访问 Google 服务）。可立即切换到内置副本继续调试，本次会话内将直接使用本地副本。',
+    'dialog.slowFrontend.useLocal': '使用内置副本',
+    'dialog.slowFrontend.wait': '继续等待',
     'theme.toLight': '切换到亮色主题',
     'theme.toDark': '切换到深色主题',
     'lang.title': '切换语言 / Switch language',
@@ -110,11 +119,21 @@ const messages = {
     'bridge.frameReady': 'iframe bridge ready',
     'bridge.frontendLoading': 'Loading the matching DevTools frontend…',
     'bridge.frontendReady': 'DevTools frontend loaded, connecting to CDP…',
+    'bridge.frontendCompatFallback':
+      'Device frontend unavailable — switched to the pinned Chromium build',
+    'bridge.frontendLocalFallback':
+      'Official frontend unreachable — using the bundled copy (may not exactly match the device)',
     'bridge.cdpOpen': 'CDP connected over WebHDC',
     'bridge.cdpClosed': 'CDP disconnected ({code})',
     'viewer.frameAccess': 'Cannot access the DevTools iframe',
     'viewer.pollStopped':
       'Auto refresh of the page list failed and was stopped',
+    'dialog.slowFrontend.title':
+      'Official DevTools frontend is slow to respond',
+    'dialog.slowFrontend.desc':
+      'The official host has not responded for 5 seconds (Google services are often unreachable in mainland China). Switch to the bundled copy to keep debugging — this session will then use it directly.',
+    'dialog.slowFrontend.useLocal': 'Use bundled copy',
+    'dialog.slowFrontend.wait': 'Keep waiting',
     'theme.toLight': 'Switch to light theme',
     'theme.toDark': 'Switch to dark theme',
     'lang.title': '切换语言 / Switch language',

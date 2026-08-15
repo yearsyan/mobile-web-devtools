@@ -1,8 +1,7 @@
 import { isRecord } from '../utils/record';
+import { OFFICIAL_FRONTEND_HOST } from './frontend-source';
 
 export const DEVTOOLS_SOCKET_COMMAND = 'cat /proc/net/unix | grep devtools';
-
-const OFFICIAL_FRONTEND_HOST = 'chrome-devtools-frontend.appspot.com';
 
 export interface DevtoolsSocket {
   name: string;

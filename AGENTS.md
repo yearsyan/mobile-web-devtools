@@ -8,6 +8,8 @@
 - `pnpm run typecheck` - Run TypeScript type checking
 - `pnpm run check` - Run Biome checks and apply safe fixes
 - `pnpm run format` - Format the project with Biome
+- `pnpm run fetch:devtools` - Download the bundled DevTools frontend fallback
+  into `public/devtools/` (gitignored; defaults to the npmmirror registry)
 
 ## Docs
 

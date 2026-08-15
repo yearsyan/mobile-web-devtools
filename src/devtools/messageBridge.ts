@@ -7,7 +7,7 @@ import { ForwardedWebSocket } from './websocket';
 type BridgeStatus =
   | { type: 'frame-ready' }
   | { type: 'frontend-loading' }
-  | { type: 'frontend-fallback'; message: string }
+  | { type: 'frontend-fallback'; key: MessageKey }
   | { type: 'frontend-ready' }
   | { type: 'frontend-error'; message: string };
 
@@ -19,6 +19,15 @@ type BridgeRequest =
 
 export interface DevtoolsBridgeStatus {
   state: 'loading' | 'open' | 'error' | 'closed';
+  /** 触发本次状态的前端阶段，viewer 用来驱动慢加载弹窗。 */
+  detail?:
+    | 'frame-ready'
+    | 'frontend-loading'
+    | 'frontend-fallback'
+    | 'frontend-ready'
+    | 'frontend-error';
+  /** detail 为 frontend-fallback 时，实际使用的 frontend 目标。 */
+  fallbackKey?: MessageKey;
   message: string;
 }
 
@@ -48,8 +57,8 @@ function parseRequest(value: unknown): BridgeRequest | null {
   if (value.type === 'frontend-error' && typeof value.message === 'string') {
     return { type: value.type, message: value.message };
   }
-  if (value.type === 'frontend-fallback' && typeof value.message === 'string') {
-    return { type: value.type, message: value.message };
+  if (value.type === 'frontend-fallback' && typeof value.key === 'string') {
+    return { type: value.type, key: value.key as MessageKey };
   }
   if (
     value.type === 'ws-connect' &&
@@ -110,6 +119,11 @@ export class DevtoolsMessageBridge {
     port.start();
   }
 
+  /** 用户在慢加载弹窗中选择立即使用内置 frontend 副本。 */
+  preferLocalFrontend(): void {
+    this.#post({ type: 'frontend-prefer-local' });
+  }
+
   #receive(value: unknown): void {
     const message = parseRequest(value);
     if (!message || this.#disposed) {
@@ -118,6 +132,7 @@ export class DevtoolsMessageBridge {
     if (message.type === 'frame-ready') {
       this.#onStatus({
         state: 'loading',
+        detail: 'frame-ready',
         message: this.#formatMessage('bridge.frameReady'),
       });
       return;
@@ -125,6 +140,7 @@ export class DevtoolsMessageBridge {
     if (message.type === 'frontend-loading') {
       this.#onStatus({
         state: 'loading',
+        detail: 'frontend-loading',
         message: this.#formatMessage('bridge.frontendLoading'),
       });
       return;
@@ -132,16 +148,26 @@ export class DevtoolsMessageBridge {
     if (message.type === 'frontend-ready') {
       this.#onStatus({
         state: 'loading',
+        detail: 'frontend-ready',
         message: this.#formatMessage('bridge.frontendReady'),
       });
       return;
     }
     if (message.type === 'frontend-fallback') {
-      this.#onStatus({ state: 'loading', message: message.message });
+      this.#onStatus({
+        state: 'loading',
+        detail: 'frontend-fallback',
+        fallbackKey: message.key,
+        message: this.#formatMessage(message.key),
+      });
       return;
     }
     if (message.type === 'frontend-error') {
-      this.#onStatus({ state: 'error', message: message.message });
+      this.#onStatus({
+        state: 'error',
+        detail: 'frontend-error',
+        message: message.message,
+      });
       return;
     }
     if (message.type === 'ws-connect') {

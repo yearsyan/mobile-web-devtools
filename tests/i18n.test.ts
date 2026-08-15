@@ -29,6 +29,29 @@ describe('i18n', () => {
     expect(t('bridge.cdpClosed', { code: 1006 })).toBe('CDP 已断开（1006）');
   });
 
+  it('frontend 回退文案在两种语言下都有定义', () => {
+    setLocale('zh');
+    expect(t('bridge.frontendCompatFallback')).toBe(
+      '设备版本 frontend 不可用，已切换到 Chromium 官方兼容版本',
+    );
+    expect(t('bridge.frontendLocalFallback')).toContain('内置副本');
+    setLocale('en');
+    expect(t('bridge.frontendCompatFallback')).toContain('pinned Chromium');
+    expect(t('bridge.frontendLocalFallback')).toContain('bundled copy');
+    setLocale('zh');
+  });
+
+  it('慢加载弹窗文案在两种语言下都有定义', () => {
+    setLocale('zh');
+    expect(t('dialog.slowFrontend.title')).toContain('响应缓慢');
+    expect(t('dialog.slowFrontend.useLocal')).toBe('使用内置副本');
+    expect(t('dialog.slowFrontend.wait')).toBe('继续等待');
+    setLocale('en');
+    expect(t('dialog.slowFrontend.title')).toContain('slow to respond');
+    expect(t('dialog.slowFrontend.useLocal')).toBe('Use bundled copy');
+    setLocale('zh');
+  });
+
   it('未知占位符保持原样', () => {
     expect(t('status.connected.adb', {})).toContain('{name}');
   });

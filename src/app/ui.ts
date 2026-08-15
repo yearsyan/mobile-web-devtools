@@ -98,6 +98,16 @@ export function renderShell(handlers: ShellHandlers): void {
         </section>
       </main>
       <footer class="footer">CDP over WebUSB · HDC / ADB</footer>
+      <dialog id="slow-frontend-dialog" class="slow-dialog">
+        <form method="dialog" class="slow-dialog-body">
+          <h3 id="slow-dialog-title"></h3>
+          <p id="slow-dialog-desc"></p>
+          <div class="slow-dialog-actions">
+            <button type="submit" value="wait" id="slow-dialog-wait" class="button secondary"></button>
+            <button type="submit" value="local" id="slow-dialog-local" class="button primary"></button>
+          </div>
+        </form>
+      </dialog>
     </div>
   `;
 
@@ -127,6 +137,14 @@ export function renderShell(handlers: ShellHandlers): void {
   $('fullscreen-button').addEventListener('click', () =>
     shellHandlers?.onFullscreen(),
   );
+  const slowDialog = $('slow-frontend-dialog') as HTMLDialogElement;
+  slowDialog.addEventListener('close', () => {
+    // ESC / 关闭等同“继续等待”；只有显式点击“使用内置副本”才触发回调。
+    if (slowDialog.returnValue === 'local') {
+      onSlowDialogUseLocal?.();
+    }
+    onSlowDialogUseLocal = null;
+  });
   updateShellTexts();
 }
 
@@ -139,6 +157,10 @@ function updateShellTexts(): void {
   $('sidebar-ports-title').textContent = t('sidebar.ports');
   $('sidebar-pages-title').textContent = t('sidebar.pages');
   $('fullscreen-button').title = t('viewer.fullscreen');
+  $('slow-dialog-title').textContent = t('dialog.slowFrontend.title');
+  $('slow-dialog-desc').textContent = t('dialog.slowFrontend.desc');
+  $('slow-dialog-wait').textContent = t('dialog.slowFrontend.wait');
+  $('slow-dialog-local').textContent = t('dialog.slowFrontend.useLocal');
   // 初始兜底；扫描期间与语言切换后的文案由 connection 按 scanning 状态维护。
   const scanButton = $('scan-button') as HTMLButtonElement;
   if (scanButton.textContent === '') {
@@ -211,6 +233,26 @@ export function setStatus(message: string, state: StatusState): void {
 export function setError(message: string | null): void {
   $('error-line').textContent = message ?? '';
   $('error-line').classList.toggle('hidden', !message);
+}
+
+let onSlowDialogUseLocal: (() => void) | null = null;
+
+/** 官方 frontend 长时间未响应时的手动切换弹窗。 */
+export function showSlowFrontendDialog(useLocal: () => void): void {
+  onSlowDialogUseLocal = useLocal;
+  const dialog = $('slow-frontend-dialog') as HTMLDialogElement;
+  if (!dialog.open) {
+    dialog.returnValue = '';
+    dialog.showModal();
+  }
+}
+
+export function hideSlowFrontendDialog(): void {
+  const dialog = $('slow-frontend-dialog') as HTMLDialogElement;
+  if (dialog.open) {
+    dialog.close();
+  }
+  onSlowDialogUseLocal = null;
 }
 
 export function setConnectLabel(label: string): void {
