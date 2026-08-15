@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="WebUSB CDP debugging for Android and HarmonyOS devices."
+    />
+    <meta name="theme-color" content="#f4f6f9" />
+    <script>
+      // 首帧前确定主题，避免深色用户看到亮色闪烁；与 app/theme.ts 逻辑保持一致。
+      var stored = null;
+      try {
+        stored = localStorage.getItem('mobile-web-devtools-theme');
+      } catch {
+        /* 存储不可用时按系统偏好 */
+      }
+      var theme =
+        stored === 'light' || stored === 'dark'
+          ? stored
+          : matchMedia('(prefers-color-scheme: dark)').matches
+            ? 'dark'
+            : 'light';
+      document.documentElement.dataset.theme = theme;
+      document
+        .querySelector('meta[name="theme-color"]')
+        .setAttribute('content', theme === 'dark' ? '#0b1118' : '#f4f6f9');
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>

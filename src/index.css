@@ -1,0 +1,615 @@
+:root {
+  color-scheme: light;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --bg: #f4f6f9;
+  --surface: #ffffff;
+  --surface-2: #edf1f5;
+  --border: #d9e1e9;
+  --border-strong: #c2cdd8;
+  --ink: #1b2430;
+  --ink-2: #3f4f61;
+  --muted: #6c7d8d;
+  --accent: #1c7ed6;
+  --accent-hover: #1969bd;
+  --accent-soft: rgba(28, 126, 214, 0.1);
+  --on-accent: #ffffff;
+  --ok: #178a4c;
+  --danger: #d64550;
+  --warn: #a66a00;
+  --code-ink: #1d5fbf;
+  --topbar-bg: rgba(255, 255, 255, 0.88);
+  --glow: rgba(28, 126, 214, 0.08);
+  --viewer-bg: #e8ecf1;
+  --mono:
+    ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono",
+    monospace;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0b1118;
+  --surface: #111a24;
+  --surface-2: #0d141d;
+  --border: #223041;
+  --border-strong: #31465e;
+  --ink: #e8eef5;
+  --ink-2: #a5b3c4;
+  --muted: #6f8195;
+  --accent: #4d9fff;
+  --accent-hover: #6db2ff;
+  --accent-soft: rgba(77, 159, 255, 0.12);
+  --on-accent: #06101d;
+  --ok: #37c871;
+  --danger: #ff6b6b;
+  --warn: #ffb454;
+  --code-ink: #8fc2ff;
+  --topbar-bg: rgba(11, 17, 24, 0.9);
+  --glow: rgba(77, 159, 255, 0.14);
+  --viewer-bg: #000000;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+}
+
+body {
+  color: var(--ink);
+  background:
+    radial-gradient(900px 360px at 80% -10%, var(--glow), transparent),
+    var(--bg);
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+code {
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: var(--accent-soft);
+  color: var(--code-ink);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+/* 应用外壳：满高 flex 布局，内容区全幅、右侧 DevTools 填满剩余空间 */
+.app {
+  display: flex;
+  height: 100vh;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  flex: 0 0 auto;
+  border-bottom: 1px solid var(--border);
+  background: var(--topbar-bg);
+  backdrop-filter: blur(10px);
+}
+
+.topbar-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  min-height: 62px;
+  padding: 8px 16px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.brand-title {
+  font-size: 14px;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.platform-switch {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+}
+
+.platform-button {
+  height: 26px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.platform-button:hover:not(:disabled) {
+  color: var(--ink);
+}
+
+.platform-button.active {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.button {
+  min-height: 32px;
+  padding: 0 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 9px;
+  background: var(--surface);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.button:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.button.primary {
+  border-color: transparent;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 600;
+}
+
+.button.primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.button.secondary {
+  background: var(--surface-2);
+}
+
+.button.quiet {
+  border-color: transparent;
+  background: transparent;
+  color: var(--ink-2);
+}
+
+.button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.support-note {
+  color: var(--warn);
+  font-size: 12px;
+}
+
+.error-line {
+  overflow: hidden;
+  max-width: 420px;
+  color: var(--danger);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.status-dot[data-state="connected"] {
+  background: var(--ok);
+  box-shadow: 0 0 0 3px rgba(60, 190, 120, 0.18);
+}
+
+.status-dot[data-state="connecting"] {
+  background: var(--warn);
+  animation: pulse 1s infinite alternate;
+}
+
+.status-dot[data-state="error"] {
+  background: var(--danger);
+}
+
+@keyframes pulse {
+  from {
+    opacity: 0.35;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.page {
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+}
+
+.empty-state {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  padding: 12vh 24px;
+  text-align: center;
+}
+
+.empty-state h1 {
+  margin: 0 0 12px;
+  font-size: 28px;
+}
+
+.empty-state p {
+  max-width: 620px;
+  margin: 8px 0;
+  color: var(--ink-2);
+  line-height: 1.7;
+}
+
+.empty-state .hint {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.kicker {
+  margin: 0 0 5px;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+}
+
+/* 打通百分比高度链：page(定高) → workspace → workspace-layout */
+.workspace {
+  height: 100%;
+}
+
+.workspace-layout {
+  display: flex;
+  gap: 16px;
+  align-items: stretch;
+  height: 100%;
+  min-height: 0;
+}
+
+.sidebar {
+  display: flex;
+  flex: 0 0 280px;
+  flex-direction: column;
+  gap: 16px;
+  width: 280px;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.sidebar-section {
+  display: flex;
+  flex-direction: column;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  min-height: 0;
+}
+
+/* 可调试页面分区占满侧栏剩余高度，列表在分区内部滚动 */
+.sidebar-section-grow {
+  flex: 1;
+}
+
+.sidebar-head {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.sidebar-head h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.sidebar-head .button {
+  min-height: 28px;
+  padding: 0 10px;
+}
+
+.side-list {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+  min-height: 0;
+}
+
+/* 调试端口列表不无限扩张，超出后内部滚动 */
+#socket-list {
+  flex: 0 1 auto;
+  max-height: 32vh;
+}
+
+.side-item {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.side-item:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+
+.side-item:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.side-item.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.side-item-title {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.side-item-sub {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.side-placeholder {
+  padding: 10px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.viewer {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--viewer-bg);
+  overflow: hidden;
+}
+
+.viewer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 46px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.viewer-title {
+  overflow: hidden;
+  min-width: 0;
+  color: var(--ink-2);
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.viewer-side {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.bridge-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.bridge-status i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--warn);
+}
+
+.bridge-status[data-state="open"] i {
+  background: var(--ok);
+}
+
+.bridge-status[data-state="error"] {
+  color: var(--danger);
+}
+
+.bridge-status[data-state="error"] i {
+  background: var(--danger);
+}
+
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  /* 符号字形（⛶/🗕/☀️ 等）按基线排布会偏上，flex 居中 + 行高 1 矫正 */
+  line-height: 1;
+  cursor: pointer;
+}
+
+.icon-button:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.icon-button svg {
+  display: block;
+}
+
+.lang-toggle {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.frame-wrap {
+  position: relative;
+  width: 100%;
+  height: calc(100vh - 250px);
+  min-height: 420px;
+}
+
+.frame-wrap iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+.frame-error {
+  padding: 32px;
+  color: var(--danger);
+  text-align: center;
+  white-space: pre-wrap;
+}
+
+/* 左右布局中 viewer 占满右侧剩余空间 */
+.workspace-layout .viewer {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  height: 100%;
+  min-height: 0;
+}
+
+.workspace-layout .frame-wrap {
+  flex: 1;
+  height: auto;
+  min-height: 0;
+}
+
+.viewer.fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  height: 100vh;
+}
+
+.viewer.fullscreen .frame-wrap {
+  flex: 1;
+  height: auto;
+}
+
+@media (max-width: 960px) {
+  /* 窄屏改为上下堆叠，页面恢复滚动 */
+  .workspace-layout {
+    flex-direction: column;
+    height: auto;
+  }
+
+  .sidebar {
+    flex-basis: auto;
+    width: 100%;
+    height: auto;
+  }
+
+  #socket-list {
+    max-height: 240px;
+  }
+
+  .workspace-layout .viewer {
+    height: 72vh;
+    min-height: 420px;
+  }
+}
+
+.footer {
+  flex: 0 0 auto;
+  padding: 10px 24px;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+@media (max-width: 720px) {
+  .topbar-inner {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .topbar-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}
+
+.hidden {
+  display: none;
+}

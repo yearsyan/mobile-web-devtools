@@ -1,0 +1,2 @@
+minimumReleaseAgeExclude:
+  - '@webhdc/core@0.1.5'

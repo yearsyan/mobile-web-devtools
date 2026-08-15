@@ -1,0 +1,27 @@
+{
+  "name": "mobile-web-devtools",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "rsbuild dev",
+    "build": "rsbuild build",
+    "preview": "rsbuild preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check": "biome check --write",
+    "format": "biome format --write"
+  },
+  "dependencies": {
+    "@webhdc/core": "^0.1.5",
+    "@yume-chan/adb": "2.6.2"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.3",
+    "@rsbuild/core": "^2.1.13",
+    "@types/node": "^24.13.3",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.10"
+  }
+}
