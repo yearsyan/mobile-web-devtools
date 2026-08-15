@@ -12,6 +12,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "fetch:devtools": "node scripts/fetch-devtools-frontend.mjs",
+    "deploy": "npx wrangler deploy",
     "check": "biome check --write",
     "format": "biome format --write"
   },
