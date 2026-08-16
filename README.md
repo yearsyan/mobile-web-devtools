@@ -3,7 +3,7 @@
 Debug WebViews on mobile devices directly from the browser over WebUSB — no local
 `adb` / `hdc` server required.
 
-**Live:** <https://devtools.durano.workers.dev/> (desktop Chrome / Edge, with the
+**Live:** <https://webinspect.online> (desktop Chrome / Edge, with the
 device plugged into the machine running the browser)
 
 Supported platforms:
