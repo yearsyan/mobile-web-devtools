@@ -132,35 +132,6 @@ code {
   flex-wrap: wrap;
 }
 
-.platform-switch {
-  display: inline-flex;
-  gap: 2px;
-  padding: 3px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--surface);
-}
-
-.platform-button {
-  height: 26px;
-  padding: 0 12px;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--muted);
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.platform-button:hover:not(:disabled) {
-  color: var(--ink);
-}
-
-.platform-button.active {
-  background: var(--accent);
-  color: var(--on-accent);
-}
-
 .button {
   min-height: 32px;
   padding: 0 14px;
@@ -371,23 +342,94 @@ code {
   min-height: 0;
 }
 
-/* 调试端口列表不无限扩张，超出后内部滚动 */
-#socket-list {
-  flex: 0 1 auto;
-  max-height: 32vh;
+/* 应用树占满侧栏高度，超出后内部滚动 */
+#app-tree {
+  flex: 1 1 auto;
+}
+
+/* 用 .side-item.tree-app 提高优先级，防止 .side-item 的 padding 简写覆盖缩进 */
+.side-item.tree-app {
+  position: relative;
+  padding-left: 26px;
+}
+
+.tree-app .tree-chevron {
+  position: absolute;
+  top: 7px;
+  left: 5px;
+  display: inline-flex;
+  color: var(--muted);
+  transition: transform 0.15s ease;
+}
+
+.tree-app.expanded .tree-chevron {
+  transform: rotate(90deg);
+}
+
+.tree-app-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+/* 页面子树：每项左侧的竖线 + 横短线拼出 ├─ / └─ 层级，不再用卡片表达嵌套 */
+.tree-pages {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0 0 4px;
+  padding: 2px 0 2px 26px;
+  list-style: none;
+}
+
+.tree-pages li {
+  position: relative;
+}
+
+/* 竖向引导线：贯穿每项整高并补上项间隙；最后一项只到横线处（└─） */
+.tree-pages li::before {
+  position: absolute;
+  top: 0;
+  bottom: -2px;
+  left: -14px;
+  width: 1px;
+  background: var(--border-strong);
+  content: "";
+}
+
+.tree-pages li:last-child::before {
+  bottom: auto;
+  height: 13px;
+}
+
+/* 横向短线：从竖线接到节点左缘 */
+.tree-page::before {
+  position: absolute;
+  top: 12px;
+  left: -14px;
+  width: 14px;
+  height: 1px;
+  background: var(--border-strong);
+  content: "";
 }
 
 .side-item {
   display: flex;
   width: 100%;
   flex-direction: column;
-  gap: 3px;
-  padding: 8px 10px;
-  border: 1px solid transparent;
-  border-radius: 8px;
+  gap: 2px;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 6px;
   background: transparent;
   text-align: left;
   cursor: pointer;
+}
+
+.side-item.tree-page {
+  position: relative;
+  padding-left: 12px;
 }
 
 .side-item:hover:not(:disabled) {
@@ -399,9 +441,25 @@ code {
   opacity: 0.55;
 }
 
+/* 选中态不用背景/边框：用文字颜色深度（强调色 + 加粗）表达，
+   页面节点再把前缀横线加粗变色作为选中标记 */
 .side-item.active {
-  border-color: var(--accent);
-  background: var(--accent-soft);
+  background: transparent;
+}
+
+.side-item.active .side-item-title {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.tree-app.active .tree-chevron {
+  color: var(--accent);
+}
+
+.tree-page.active::before {
+  top: 11px;
+  height: 2px;
+  background: var(--accent);
 }
 
 .side-item-title {
@@ -410,6 +468,17 @@ code {
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* 未选中的页面标题弱化一档，与应用节点、选中态拉开层次 */
+.tree-page .side-item-title {
+  color: var(--ink-2);
+  font-weight: 500;
+}
+
+.tree-page.active .side-item-title {
+  color: var(--accent);
+  font-weight: 700;
 }
 
 .side-item-sub {
@@ -580,7 +649,7 @@ code {
     height: auto;
   }
 
-  #socket-list {
+  #app-tree {
     max-height: 240px;
   }
 

@@ -1,13 +1,9 @@
-import type { DevtoolsSocket } from '../devtools/discovery';
-import type { Platform } from './device-client';
 import { $ } from './dom';
 import { currentLocale, type MessageKey, onLocaleChange, t } from './i18n';
 import { EXPAND_ICON } from './icons';
-import { normalizePackageName } from './packages';
 import { currentClient, state } from './state';
 
 export interface ShellHandlers {
-  onSwitchPlatform(platform: Platform): void;
   onConnect(): void;
   onDisconnect(): void;
   onScan(): void;
@@ -37,10 +33,6 @@ export function renderShell(handlers: ShellHandlers): void {
             <strong class="brand-title">Web DevTools</strong>
           </div>
           <div class="topbar-actions">
-            <div class="platform-switch" role="group" aria-label="设备平台">
-              <button type="button" id="platform-harmony" class="platform-button active">HarmonyOS</button>
-              <button type="button" id="platform-android" class="platform-button">Android</button>
-            </div>
             <button type="button" id="theme-toggle" class="icon-button" title=""></button>
             <button type="button" id="lang-toggle" class="icon-button lang-toggle" title=""></button>
             <span id="support-note" class="support-note"></span>
@@ -63,24 +55,15 @@ export function renderShell(handlers: ShellHandlers): void {
         <section id="workspace" class="workspace hidden">
           <div class="workspace-layout">
             <aside class="sidebar">
-              <section class="sidebar-section">
-                <header class="sidebar-head">
-                  <div>
-                    <p class="kicker">WEBVIEW DEBUGGING</p>
-                    <h2 id="sidebar-ports-title"></h2>
-                  </div>
-                  <button type="button" id="scan-button" class="button secondary"></button>
-                </header>
-                <ul id="socket-list" class="side-list"></ul>
-              </section>
               <section class="sidebar-section sidebar-section-grow">
                 <header class="sidebar-head">
                   <div>
-                    <p class="kicker">PAGES</p>
-                    <h2 id="sidebar-pages-title"></h2>
+                    <p class="kicker">WEBVIEW DEBUGGING</p>
+                    <h2 id="sidebar-apps-title"></h2>
                   </div>
+                  <button type="button" id="scan-button" class="button secondary"></button>
                 </header>
-                <ul id="target-list" class="side-list"></ul>
+                <ul id="app-tree" class="side-list"></ul>
               </section>
             </aside>
             <section id="viewer" class="viewer hidden">
@@ -111,12 +94,6 @@ export function renderShell(handlers: ShellHandlers): void {
     </div>
   `;
 
-  $('platform-harmony').addEventListener('click', () =>
-    shellHandlers?.onSwitchPlatform('harmony'),
-  );
-  $('platform-android').addEventListener('click', () =>
-    shellHandlers?.onSwitchPlatform('android'),
-  );
   $('theme-toggle').addEventListener('click', () =>
     shellHandlers?.onToggleTheme(),
   );
@@ -154,8 +131,12 @@ export function renderShell(handlers: ShellHandlers): void {
  */
 function updateShellTexts(): void {
   $('empty-title').textContent = t('empty.title');
-  $('sidebar-ports-title').textContent = t('sidebar.ports');
-  $('sidebar-pages-title').textContent = t('sidebar.pages');
+  $('empty-desc').textContent = t('empty.desc.auto');
+  $('empty-hint').textContent = t('empty.hint.auto');
+  $('support-note').textContent = currentClient().isSupported()
+    ? ''
+    : t('support.noWebUsb');
+  $('sidebar-apps-title').textContent = t('sidebar.apps');
   $('fullscreen-button').title = t('viewer.fullscreen');
   $('slow-dialog-title').textContent = t('dialog.slowFrontend.title');
   $('slow-dialog-desc').textContent = t('dialog.slowFrontend.desc');
@@ -184,17 +165,10 @@ export function setBusy(next: boolean): void {
   const connectButton = $('connect-button') as HTMLButtonElement;
   const emptyConnect = $('empty-connect') as HTMLButtonElement;
   const scanButton = $('scan-button') as HTMLButtonElement;
-  const harmonyButton = $('platform-harmony') as HTMLButtonElement;
-  const androidButton = $('platform-android') as HTMLButtonElement;
   connectButton.disabled = state.connecting;
   emptyConnect.disabled = state.connecting;
   scanButton.disabled = state.connecting;
-  harmonyButton.disabled = state.connecting;
-  androidButton.disabled = state.connecting;
-  for (const button of sideListButtons('#socket-list')) {
-    button.disabled = state.connecting;
-  }
-  for (const button of sideListButtons('#target-list')) {
+  for (const button of sideListButtons('#app-tree')) {
     button.disabled = state.connecting;
   }
 }
@@ -269,22 +243,6 @@ export function syncConnectButton(): void {
   $('empty-connect').textContent = t('common.connect');
 }
 
-export function updatePlatformUi(): void {
-  const client = currentClient();
-  const android = client.platform === 'android';
-  $('platform-harmony').classList.toggle('active', !android);
-  $('platform-android').classList.toggle('active', android);
-  $('empty-desc').textContent = android
-    ? t('empty.desc.android')
-    : t('empty.desc.harmony');
-  $('empty-hint').textContent = android
-    ? t('empty.hint.android')
-    : t('empty.hint.harmony');
-  $('support-note').textContent = client.isSupported()
-    ? ''
-    : t('support.noWebUsb');
-}
-
 export function showConnected(info: DeviceStatusInfo): void {
   state.connected = true;
   $('empty-state').classList.add('hidden');
@@ -307,125 +265,6 @@ export function showDisconnected(): void {
   syncConnectButton();
 }
 
-function socketTitle(socket: DevtoolsSocket): string {
-  return socket.pid ? `WebView · PID ${socket.pid}` : 'WebView DevTools';
-}
-
-/** socket 列表项的“打开 DevTools”回调由 viewer 注入，避免 ui 依赖 viewer。 */
-let onOpenSocket: ((socket: DevtoolsSocket) => void) | null = null;
-
-/** name → socket 的映射，供列表项点击时回查目标。 */
-const socketByName = new Map<string, DevtoolsSocket>();
-
-/** 已解析的 PID → 原始包名映射，语言切换重绘列表时复用。 */
-const resolvedPackages = new Map<string, string>();
-
-/** 当前已映射（正在调试）的 socket 名，用于列表高亮。 */
-let activeSocketName: string | null = null;
-
-export function setSocketOpenHandler(
-  handler: (socket: DevtoolsSocket) => void,
-): void {
-  onOpenSocket = handler;
-}
-
-function listPlaceholder(text: string): HTMLLIElement {
-  const item = document.createElement('li');
-  item.className = 'side-placeholder';
-  item.textContent = text;
-  return item;
-}
-
-function appendSocketRow(socket: DevtoolsSocket): void {
-  const list = $('socket-list');
-  const item = document.createElement('li');
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.className = 'side-item';
-  button.dataset.socketName = socket.name;
-  button.classList.toggle('active', socket.name === activeSocketName);
-  const title = document.createElement('strong');
-  title.className = 'side-item-title';
-  title.textContent = socketTitle(socket);
-  const sub = document.createElement('small');
-  sub.className = 'side-item-sub';
-  sub.textContent = socket.name;
-  sub.title = socket.raw;
-  button.append(title, sub);
-  button.addEventListener('click', () => {
-    const target = socketByName.get(socket.name);
-    if (target) {
-      onOpenSocket?.(target);
-    }
-  });
-  item.append(button);
-  list.append(item);
-}
-
-/** 扫描进行中的占位状态。 */
-export function setSocketScanPending(): void {
-  $('socket-list').replaceChildren(listPlaceholder(t('scan.reading')));
-}
-
-export function renderSocketList(sockets: DevtoolsSocket[]): void {
-  const list = $('socket-list');
-  list.replaceChildren();
-  socketByName.clear();
-  if (sockets.length === 0) {
-    resolvedPackages.clear();
-    list.append(listPlaceholder(t('sockets.empty')));
-    return;
-  }
-  for (const socket of sockets) {
-    socketByName.set(socket.name, socket);
-    appendSocketRow(socket);
-  }
-}
-
-/** 高亮当前正在调试的 socket（null 取消高亮）。 */
-export function setActiveSocket(name: string | null): void {
-  activeSocketName = name;
-  for (const button of sideListButtons('#socket-list')) {
-    button.classList.toggle('active', button.dataset.socketName === name);
-  }
-}
-
-export function applySocketPackages(packages: Map<string, string>): void {
-  resolvedPackages.clear();
-  for (const [pid, name] of packages) {
-    resolvedPackages.set(pid, name);
-  }
-  for (const button of sideListButtons('#socket-list')) {
-    const socket = socketByName.get(button.dataset.socketName ?? '');
-    const title = button.querySelector<HTMLElement>('.side-item-title');
-    const sub = button.querySelector<HTMLElement>('.side-item-sub');
-    if (!socket?.pid || !title || !sub) {
-      continue;
-    }
-    const rawName = packages.get(socket.pid);
-    const packageName = rawName ? normalizePackageName(rawName) : '';
-    if (packageName) {
-      title.textContent = packageName;
-      title.title = rawName ?? packageName;
-      sub.textContent = `PID ${socket.pid} · ${socket.name}`;
-    } else {
-      title.textContent = `WebView · PID ${socket.pid}`;
-      sub.textContent = t('sockets.noPackage', { name: socket.name });
-    }
-  }
-}
-
-/** 语言切换后重绘 socket 列表（保留已解析的包名）。 */
-function refreshSocketListOnLocale(): void {
-  if (socketByName.size === 0) {
-    return;
-  }
-  renderSocketList([...socketByName.values()]);
-  applySocketPackages(resolvedPackages);
-}
-
 onLocaleChange(() => {
   updateShellTexts();
-  updatePlatformUi();
-  refreshSocketListOnLocale();
 });

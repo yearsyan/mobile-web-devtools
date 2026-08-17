@@ -4,7 +4,7 @@ import {
   parseDevtoolsSockets,
 } from '../devtools/discovery';
 import { AUTO_SCAN_MAX_ATTEMPTS, nextAutoScanDelay } from './autoscan';
-import type { Platform } from './device-client';
+import { DEVICE_USB_FILTERS, detectDevicePlatform, getUsbApi } from './detect';
 import { $, formatError } from './dom';
 import { onLocaleChange, t } from './i18n';
 import {
@@ -15,20 +15,22 @@ import {
   parseProcessTable,
 } from './packages';
 import { currentClient, setPlatform, state } from './state';
+import { applyTreePackages, renderTreeApps, setTreeScanPending } from './tree';
 import {
-  applySocketPackages,
-  renderSocketList,
   setBusy,
   setConnectLabel,
   setError,
-  setSocketScanPending,
   setStatusKey,
   showConnected,
   showDisconnected,
   syncConnectButton,
-  updatePlatformUi,
 } from './ui';
-import { closeMapped, hasMappedForward, invalidateMap } from './viewer';
+import {
+  closeMapped,
+  hasMappedForward,
+  invalidateMap,
+  openSocket,
+} from './viewer';
 
 const SCAN_TIMEOUT = 15_000;
 /** 连接期间后台重扫调试端口的间隔；让新打开应用的 socket 自动出现在下拉菜单。 */
@@ -41,41 +43,25 @@ let autoScanTimer: ReturnType<typeof setTimeout> | null = null;
 let autoScanAttempts = 0;
 let socketRefreshTimer: ReturnType<typeof setInterval> | null = null;
 
-export async function switchPlatform(next: Platform): Promise<void> {
-  if (next === state.platform || state.connecting) {
-    return;
-  }
-  clearAutoScan();
-  setBusy(true);
-  setError(null);
-  try {
-    if (state.connected) {
-      await disconnectDevice();
-    }
-    setPlatform(next);
-    updatePlatformUi();
-  } catch (error) {
-    setError(formatError(error));
-  } finally {
-    setBusy(false);
-  }
-}
-
 export async function connectDevice(): Promise<void> {
   if (state.connecting) {
     return;
   }
-  const client = currentClient();
   setBusy(true);
   setError(null);
-  setStatusKey(client.statusOpeningKey, 'connecting');
+  setStatusKey('status.detecting', 'connecting');
   setConnectLabel(t('common.connecting'));
   try {
-    const devices = await client.getDevices();
-    const picked =
-      devices.length === 1 ? devices[0] : await client.requestDevice();
+    const device = await pickUsbDevice();
+    // 安卓走 ADB、鸿蒙走 HDC，按 USB 接口描述符自动识别，无需用户选择。
+    const platform = await detectDevicePlatform(device);
+    if (!platform) {
+      throw new Error(t('error.unknownProtocol'));
+    }
+    setPlatform(platform);
+    const client = currentClient();
     setStatusKey(client.statusSessionKey, 'connecting');
-    const info = await client.connect(picked);
+    const info = await client.connect(device);
     showConnected(info);
     await scanSockets();
     startSocketRefresh();
@@ -86,6 +72,22 @@ export async function connectDevice(): Promise<void> {
     setBusy(false);
     syncConnectButton();
   }
+}
+
+/**
+ * 选取 USB 设备：已授权设备恰好一台时直接使用，否则弹出浏览器选择器。
+ * 选择器过滤器同时包含 ADB 与 HDC 接口，两类设备都会列出。
+ */
+async function pickUsbDevice(): Promise<HdcUsbDevice> {
+  const usb = getUsbApi();
+  if (!usb) {
+    throw new Error(t('support.noWebUsb'));
+  }
+  const authorized = await usb.getDevices();
+  if (authorized.length === 1 && authorized[0]) {
+    return authorized[0];
+  }
+  return usb.requestDevice({ filters: DEVICE_USB_FILTERS });
 }
 
 export async function disconnectDevice(): Promise<void> {
@@ -162,7 +164,7 @@ export async function scanSockets({
   if (!quiet) {
     scanButton.disabled = true;
     scanButton.textContent = t('scan.scanning');
-    setSocketScanPending();
+    setTreeScanPending();
     setError(null);
   }
   try {
@@ -172,14 +174,20 @@ export async function scanSockets({
     const sockets = parseDevtoolsSockets(cleanTerminalText(result.stdout));
     if (sequence === scanSequence) {
       lastSocketCount = sockets.length;
-      renderSocketList(sockets);
+      renderTreeApps(sockets);
       void resolveSocketPackages(sockets, sequence);
+      // 默认展开：尚未映射任何应用时自动打开第一个 socket，
+      // 让树直接展开页面列表并加载 DevTools。
+      const first = sockets[0];
+      if (first && !hasMappedForward()) {
+        openSocket(first);
+      }
     }
   } catch (error) {
     if (sequence === scanSequence) {
       if (!quiet) {
         lastSocketCount = 0;
-        renderSocketList([]);
+        renderTreeApps([]);
         setError(t('error.scanFailed', { error: formatError(error) }));
       }
     }
@@ -258,7 +266,7 @@ async function resolveSocketPackages(
   if (sequence !== scanSequence) {
     return;
   }
-  applySocketPackages(packages);
+  applyTreePackages(packages);
 }
 
 /** lib.dom 不含 WebUSB 类型；按 HdcUsbApi 的结构最小化声明事件接口。 */

@@ -5,18 +5,16 @@ import {
   disconnectDevice,
   initUsbDisconnectListener,
   scanSockets,
-  switchPlatform,
 } from './app/connection';
 import { initLocale, toggleLocale } from './app/i18n';
 import { initTheme, toggleTheme } from './app/theme';
-import { renderShell, updatePlatformUi } from './app/ui';
+import { renderShell } from './app/ui';
 import { initViewer, toggleFullscreen } from './app/viewer';
 
 document.addEventListener('DOMContentLoaded', () => {
   initLocale();
   initViewer();
   renderShell({
-    onSwitchPlatform: (platform) => void switchPlatform(platform),
     onConnect: () => void connectDevice(),
     onDisconnect: () => void disconnectDevice(),
     onScan: () => {
@@ -27,7 +25,6 @@ document.addEventListener('DOMContentLoaded', () => {
     onToggleTheme: toggleTheme,
     onToggleLocale: toggleLocale,
   });
-  updatePlatformUi();
   initTheme();
   initUsbDisconnectListener();
 });

@@ -30,8 +30,7 @@ export interface DeviceForwardOptions {
  */
 export interface DeviceClient {
   readonly platform: Platform;
-  /** 连接握手各阶段的 UI 状态消息 key */
-  readonly statusOpeningKey: 'status.opening.adb' | 'status.opening.hdc';
+  /** 连接握手阶段的 UI 状态消息 key */
   readonly statusSessionKey: 'status.session.adb' | 'status.session.hdc';
   /** 扫描 WebView 调试 socket 的命令 */
   readonly scanCommand: string;
@@ -73,7 +72,6 @@ export function createHdcDeviceClient(): DeviceClient {
   });
   return {
     platform: 'harmony',
-    statusOpeningKey: 'status.opening.hdc',
     statusSessionKey: 'status.session.hdc',
     scanCommand: DEVTOOLS_SOCKET_COMMAND,
     processTableCommand: 'ps -ef',
@@ -92,7 +90,6 @@ export function createAdbDeviceClient(): DeviceClient {
   const client = new AdbClient({ appName: 'mobile-web-devtools' });
   return {
     platform: 'android',
-    statusOpeningKey: 'status.opening.adb',
     statusSessionKey: 'status.session.adb',
     scanCommand: 'cat /proc/net/unix',
     processTableCommand: 'ps -A -o PID,NAME',

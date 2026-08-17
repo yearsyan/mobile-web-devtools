@@ -18,13 +18,8 @@ import { onLocaleChange, t } from './i18n';
 import { EXPAND_ICON, MINIMIZE_ICON } from './icons';
 import { currentClient } from './state';
 import { planTargetRefresh } from './target-refresh';
-import {
-  hideSlowFrontendDialog,
-  setActiveSocket,
-  setError,
-  setSocketOpenHandler,
-  showSlowFrontendDialog,
-} from './ui';
+import { initTree, setTreeActiveSocket, setTreePages } from './tree';
+import { hideSlowFrontendDialog, setError, showSlowFrontendDialog } from './ui';
 
 const FORWARD_OPTIONS = { timeout: 15_000, highWaterMark: 32 * 1024 * 1024 };
 const TARGET_POLL_INTERVAL = 2_000;
@@ -34,6 +29,7 @@ const SLOW_FRONTEND_PROMPT_MS = 5_000;
 
 let mapSequence = 0;
 let mappedForward: HdcForward | null = null;
+let mappedSocketName: string | null = null;
 let mappedVersion: DevtoolsVersion | null = null;
 let mappedTargets: DevtoolsTarget[] = [];
 let activeTarget: DevtoolsTarget | null = null;
@@ -47,9 +43,12 @@ let slowFrontendTimer: ReturnType<typeof setTimeout> | null = null;
 /** 用户手动选择过内置副本后，本次会话内的新 frame 直接走本地。 */
 let localFrontendPreferred = false;
 
-/** 注册 socket 列表“打开 DevTools”入口。 */
+/** 注册树节点的“打开应用 / 切换页面”入口。 */
 export function initViewer(): void {
-  setSocketOpenHandler((socket) => void mapSocket(socket));
+  initTree({
+    onOpenSocket: (socket) => void mapSocket(socket),
+    onSelectTarget: (target) => selectTarget(target),
+  });
 }
 
 /** 使进行中的映射失效（断开 / 重扫时调用），过期结果会被丢弃。 */
@@ -60,6 +59,11 @@ export function invalidateMap(): void {
 /** 当前是否有已建立的 DevTools forward 会话。 */
 export function hasMappedForward(): boolean {
   return mappedForward !== null;
+}
+
+/** 打开指定应用的 DevTools（供树节点点击与扫描后自动展开使用）。 */
+export function openSocket(socket: DevtoolsSocket): void {
+  void mapSocket(socket);
 }
 
 async function readJson(forward: HdcForward, path: string): Promise<string> {
@@ -106,10 +110,11 @@ async function mapSocket(socket: DevtoolsSocket): Promise<void> {
       return;
     }
     mappedForward = forward;
+    mappedSocketName = socket.name;
     mappedVersion = version;
     mappedTargets = targets;
     activeTarget = targets[0] ?? null;
-    setActiveSocket(socket.name);
+    setTreeActiveSocket(socket.name);
     renderViewer(socket, targets, version);
     startTargetPolling();
   } catch (error) {
@@ -134,8 +139,13 @@ function renderViewer(
   viewer.classList.remove('hidden');
   viewer.dataset.socket = socket.name;
   mappedTargets = targets;
-  renderTargetList(targets);
+  syncTreePages();
   renderFrame(targets, version);
+}
+
+/** 把当前映射应用的页面列表同步到侧栏树。 */
+function syncTreePages(): void {
+  setTreePages(mappedSocketName, mappedTargets, activeTarget?.id ?? null);
 }
 
 /**
@@ -174,7 +184,7 @@ async function pollTargets(): Promise<void> {
     }
     mappedTargets = targets;
     activeTarget = plan.active;
-    renderTargetList(targets);
+    syncTreePages();
     if (targets.length === 0) {
       setBridgeStatus({
         state: 'error',
@@ -202,47 +212,14 @@ function targetTitle(target: DevtoolsTarget): string {
   return title && title !== 'Untitled' ? title : target.url || target.id;
 }
 
-/** 可调试页面列表渲染进左侧侧栏；点击切换当前调试的页面。 */
-function renderTargetList(targets: DevtoolsTarget[]): void {
-  const list = $('target-list');
-  list.replaceChildren();
-  if (targets.length === 0) {
-    const placeholder = document.createElement('li');
-    placeholder.className = 'side-placeholder';
-    placeholder.textContent = mappedForward
-      ? t('targets.empty')
-      : t('targets.placeholder');
-    list.append(placeholder);
+/** 点击树中的页面节点：切换当前调试的页面并重载 frame。 */
+function selectTarget(target: DevtoolsTarget): void {
+  if (activeTarget?.id === target.id) {
     return;
   }
-  for (const target of targets) {
-    const item = document.createElement('li');
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'side-item';
-    button.dataset.targetId = target.id;
-    button.classList.toggle('active', target.id === activeTarget?.id);
-    const title = document.createElement('strong');
-    title.className = 'side-item-title';
-    title.textContent = targetTitle(target);
-    title.title = target.url || target.id;
-    const sub = document.createElement('small');
-    sub.className = 'side-item-sub';
-    sub.textContent = target.type;
-    button.append(title, sub);
-    button.addEventListener('click', () => {
-      if (activeTarget?.id === target.id) {
-        return;
-      }
-      activeTarget = target;
-      for (const child of list.querySelectorAll('button')) {
-        child.classList.toggle('active', child === button);
-      }
-      renderFrame(targets, mappedVersion);
-    });
-    item.append(button);
-    list.append(item);
-  }
+  activeTarget = target;
+  syncTreePages();
+  renderFrame(mappedTargets, mappedVersion);
 }
 
 function renderFrame(
@@ -411,17 +388,17 @@ export async function closeMapped(): Promise<void> {
   hideSlowFrontendDialog();
   const forward = mappedForward;
   mappedForward = null;
+  mappedSocketName = null;
   mappedVersion = null;
   mappedTargets = [];
   activeTarget = null;
-  setActiveSocket(null);
+  setTreeActiveSocket(null);
   if (forward) {
     await forward.close().catch(() => {});
   }
   $('frame-wrap').replaceChildren();
   $('frame-error').classList.add('hidden');
   $('frame-error').textContent = '';
-  $('target-list').replaceChildren();
   $('viewer-title').textContent = 'DevTools';
   $('viewer').classList.add('hidden');
   document.body.style.overflow = '';
@@ -429,7 +406,6 @@ export async function closeMapped(): Promise<void> {
 }
 
 onLocaleChange(() => {
-  renderTargetList(mappedTargets);
   $('viewer-title').textContent = activeTarget
     ? `DevTools · ${targetTitle(activeTarget)}`
     : 'DevTools';
